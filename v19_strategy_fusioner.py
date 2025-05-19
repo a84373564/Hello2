@@ -1,44 +1,65 @@
+# 檔案：v19_strategy_fusioner.py
+import os
 import json
-import hashlib
+import random
 from datetime import datetime
 
-SOURCE = "/mnt/data/hello/elite_modules.json"
-DEST_DIR = "/mnt/data/hello/modules"
+ELITE_PATH = "/mnt/data/hello/elite_modules.json"
+MODULE_DIR = "/mnt/data/hello/modules"
+FUSED_PREFIX = "mod_FUSED_"
+FUSED_FILE = f"{FUSED_PREFIX}{random.randint(1_000_000, 9_999_999)}.json"
+FUSED_PATH = os.path.join(MODULE_DIR, FUSED_FILE)
 
-def load_elite_modules(path):
+def load_json(path):
     try:
         with open(path, "r") as f:
-            data = json.load(f)
-        return data.get("elite_modules", [])
+            return json.load(f)
     except Exception as e:
-        print(f"[!] 無法讀取 elite_modules：{e}")
-        return []
-
-def fuse_modules(modules):
-    if len(modules) < 2:
-        print("[!] 少於兩個模組，跳過融合")
+        print(f"[x] 無法讀取 JSON：{e}")
         return None
 
-    avg_score = sum(m["score"] for m in modules) / len(modules)
-    avg_profit = sum(m["profit"] for m in modules) / len(modules)
+def load_module_data(filename):
+    path = os.path.join(MODULE_DIR, filename)
+    if not os.path.exists(path):
+        print(f"[!] 模組遺失：{filename}")
+        return None
+    return load_json(path)
 
-    fused = {
-        "strategy": "fused_elite",
-        "components": [m["file"] for m in modules],
-        "score": round(avg_score, 4),
-        "profit": round(avg_profit, 4),
-        "timestamp": datetime.utcnow().isoformat()
+def fuse_logic(mod1, mod2):
+    avg_score = round((mod1["score"] + mod2["score"]) / 2, 4)
+    avg_profit = round((mod1["profit"] + mod2["profit"]) / 2, 4)
+    return {
+        "strategy": {
+            "fused_from": [mod1["file"], mod2["file"]],
+            "logic": {
+                "avg_score": avg_score,
+                "avg_profit": avg_profit,
+            },
+        },
+        "metadata": {
+            "created_at": datetime.utcnow().isoformat(),
+            "source": "v19_strategy_fusioner"
+        }
     }
 
-    uid = hashlib.sha1(json.dumps(fused).encode()).hexdigest()[:10]
-    fused_filename = f"{DEST_DIR}/mod_FUSED_{uid}.json"
+elite_data = load_json(ELITE_PATH)
+if not elite_data or "elite_modules" not in elite_data:
+    print("[x] 無法讀取 elite_modules.json 或格式錯誤")
+    exit(1)
 
-    with open(fused_filename, "w") as f:
-        json.dump(fused, f, indent=2)
+elite = [m for m in elite_data["elite_modules"] if "file" in m and "score" in m and "profit" in m]
+if len(elite) < 2:
+    print("[x] elite_modules 數量不足")
+    exit(1)
 
-    print(f"[+] 產生融合模組：{fused_filename}")
-    return fused
+mod1, mod2 = random.sample(elite, 2)
 
-if __name__ == "__main__":
-    elite = load_elite_modules(SOURCE)
-    fuse_modules(elite)
+if not (load_module_data(mod1["file"]) and load_module_data(mod2["file"])):
+    print("[x] 模組讀取失敗，跳過融合")
+    exit(1)
+
+fused = fuse_logic(mod1, mod2)
+
+with open(FUSED_PATH, "w") as f:
+    json.dump(fused, f, indent=2)
+print(f"[+] 產生融合模組：{FUSED_PATH}")
